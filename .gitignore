@@ -1,0 +1,30 @@
+# ROS 2 generated directories
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup / temporary files
+*.bak
+*~
+*.swp
+*.tmp
+
+# IDE / editor
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# ROS / Gazebo temporary files
+*.log
+
+# Generated TF graphs
+frames*.pdf
+frames*.gv
