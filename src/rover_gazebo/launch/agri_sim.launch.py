@@ -2,22 +2,24 @@ import os
 
 from launch import LaunchDescription
 from launch.actions import ExecuteProcess, TimerAction
+from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
 
-    # Find installed rover_gazebo package
+    # =========================================================
+    # Package paths
+    # =========================================================
+
     pkg_rover_gazebo = get_package_share_directory('rover_gazebo')
 
-    # Agricultural Gazebo world
     world_file = os.path.join(
         pkg_rover_gazebo,
         'worlds',
         'agri_world.sdf'
     )
 
-    # Rover Gazebo model
     rover_model = os.path.join(
         pkg_rover_gazebo,
         'models',
@@ -25,13 +27,9 @@ def generate_launch_description():
         'model.sdf'
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # Gazebo environment
-    #
-    # ROS Rolling provides its own Gazebo configuration paths.
-    # Add the system Gazebo configuration directory so that
-    # Gazebo Harmonic / gz-sim8 can also be discovered.
-    # ---------------------------------------------------------
+    # =========================================================
 
     gz_config_path = os.environ.get('GZ_CONFIG_PATH', '')
 
@@ -40,7 +38,10 @@ def generate_launch_description():
     else:
         gz_config_path = '/usr/share/gz'
 
-    gz_resource_path = os.environ.get('GZ_SIM_RESOURCE_PATH', '')
+    gz_resource_path = os.environ.get(
+        'GZ_SIM_RESOURCE_PATH',
+        ''
+    )
 
     models_path = os.path.join(
         pkg_rover_gazebo,
@@ -53,10 +54,14 @@ def generate_launch_description():
         gz_resource_path = models_path
 
     gazebo_environment = os.environ.copy()
+
     gazebo_environment['GZ_CONFIG_PATH'] = gz_config_path
     gazebo_environment['GZ_SIM_RESOURCE_PATH'] = gz_resource_path
 
-    # Start Gazebo with agricultural world
+    # =========================================================
+    # Start Gazebo
+    # =========================================================
+
     gazebo = ExecuteProcess(
         cmd=[
             'gz',
@@ -68,7 +73,10 @@ def generate_launch_description():
         additional_env=gazebo_environment
     )
 
-    # Spawn rover after Gazebo has started
+    # =========================================================
+    # Spawn rover
+    # =========================================================
+
     spawn_rover = TimerAction(
         period=3.0,
         actions=[
@@ -96,7 +104,73 @@ def generate_launch_description():
         ]
     )
 
+    # =========================================================
+    # Gazebo -> ROS LiDAR bridge
+    # =========================================================
+
+    lidar_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan'
+        ],
+        output='screen'
+    )
+
+    # =========================================================
+    # Gazebo -> ROS rover TF bridge
+    # =========================================================
+
+    tf_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/model/wave_rover/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V'
+        ],
+        output='screen'
+    )
+
+    # =========================================================
+    # Static transform:
+    # base_link -> LiDAR
+    # =========================================================
+
+    lidar_static_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=[
+            '--x', '0.45',
+            '--y', '0',
+            '--z', '1.20',
+            '--roll', '0',
+            '--pitch', '0',
+            '--yaw', '0',
+            '--frame-id', 'base_link',
+            '--child-frame-id',
+            'wave_rover/base_link/front_lidar'
+        ],
+        output='screen'
+    )
+
+    # =========================================================
+    # Start ROS components after rover has spawned
+    # =========================================================
+
+    start_ros_components = TimerAction(
+        period=5.0,
+        actions=[
+            lidar_bridge,
+            tf_bridge,
+            lidar_static_tf
+        ]
+    )
+
+    # =========================================================
+    # Launch everything
+    # =========================================================
+
     return LaunchDescription([
         gazebo,
-        spawn_rover
+        spawn_rover,
+        start_ros_components
     ])
